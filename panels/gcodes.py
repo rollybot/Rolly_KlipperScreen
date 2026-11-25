@@ -476,6 +476,12 @@ class Panel(ScreenPanel):
             info += (
                 _("Nozzle diameter") + f": <b>{fileinfo['nozzle_diameter']}</b> " + _("mm") + "\n"
             )
+        # added by rollybot
+        if fileinfo.get("first_layer_extr_temp") is not None:
+            info += _("Hotend Temp") + f": <b>{fileinfo['first_layer_extr_temp']:.0f}</b> °C\n"
+        if fileinfo.get("first_layer_bed_temp") is not None:
+            info += _("Bed Temp") + f": <b>{fileinfo['first_layer_bed_temp']:.0f}</b> °C\n"
+        # added by rollybot
         if "slicer" in fileinfo:
             info += (
                 _("Slicer") + f": <b>{fileinfo['slicer']} "

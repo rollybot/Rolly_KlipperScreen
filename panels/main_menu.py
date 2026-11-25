@@ -44,38 +44,13 @@ class Panel(MenuPanel):
         self.content.add(self.main_menu)
 
     def update_graph_visibility(self, force_hide=False):
-        if self.left_panel is None:
-            logging.info("No left panel")
-            return
-        count = 0
-        for device in self.devices:
-            visible = self._config.get_config().getboolean(
-                f"graph {self._screen.state.printer_name}", device, fallback=True
-            )
-            self.devices[device]["visible"] = visible
-            self.labels["da"].set_showing(device, visible)
-            if visible:
-                count += 1
-                self.devices[device]["name"].get_style_context().add_class("graph_label")
-            else:
-                self.devices[device]["name"].get_style_context().remove_class("graph_label")
-        if count > 0 and not force_hide:
-            if self.labels["da"] not in self.left_panel:
-                self.left_panel.add(self.labels["da"])
-            self.labels["da"].queue_draw()
-            self.labels["da"].show()
-            if self.graph_update is None:
-                # This has a high impact on load
-                self.graph_update = GLib.timeout_add_seconds(5, self.update_graph)
-        elif self.labels["da"] in self.left_panel:
-            self.left_panel.remove(self.labels["da"])
-            if self.graph_update is not None:
-                GLib.source_remove(self.graph_update)
-                self.graph_update = None
         return False
 
     def activate(self):
         self.update_graph_visibility()
+        # 화면이 다시 보일 때 최신 상태로 갱신
+        if hasattr(self, "left_helper"):
+            self.left_helper.update()
 
     def deactivate(self):
         if self.graph_update is not None:
@@ -252,28 +227,9 @@ class Panel(MenuPanel):
             )
 
     def create_left_panel(self):
-        self.labels["devices"] = Gtk.Grid(vexpand=False)
-        self.labels["devices"].get_style_context().add_class("heater-grid")
-
-        name = Gtk.Label()
-        temp = Gtk.Label(label=_("Temp (°C)"))
-
-        self.labels["devices"].attach(name, 0, 0, 1, 1)
-        self.labels["devices"].attach(temp, 1, 0, 1, 1)
-
-        self.labels["da"] = HeaterGraph(self._screen, self._printer, self._gtk.font_size)
-
-        scroll = self._gtk.ScrolledWindow(steppers=False)
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.get_style_context().add_class("heater-list")
-        scroll.add(self.labels["devices"])
-
-        self.left_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.left_panel.add(scroll)
-
-        for d in self._printer.get_temp_devices():
-            self.add_device(d)
-
+        from panels.my_left_panel import LeftPanel
+        self.left_helper = LeftPanel(self)
+        self.left_panel = self.left_helper.box
         return self.left_panel
 
     def hide_numpad(self, widget=None):
@@ -296,25 +252,14 @@ class Panel(MenuPanel):
         self.numpad_visible = False
         self._screen.base_panel.set_control_sensitive(False, control="back")
 
+    # [MODIFIED] 온도 갱신은 새 왼쪽 패널이 처리
     def process_update(self, action, data):
         if action != "notify_status_update":
             return
-
         if not self._printer:
             return
-        for device in self._printer.get_temp_devices():
-            if device not in data:
-                continue
-            if device in self._filtered:
-                continue
-            if device not in self.devices and not self.add_device(device):
-                continue
-            self.update_temp(
-                device,
-                self._printer.get_stat(device, "temperature"),
-                self._printer.get_stat(device, "target"),
-                self._printer.get_stat(device, "power"),
-            )
+        if hasattr(self, "left_helper"):
+            self.left_helper.update()
 
     def show_numpad(self, widget, device):
         if self.active_heater is not None:

@@ -270,6 +270,10 @@ class Panel(ScreenPanel):
 
         info = Gtk.Grid(row_homogeneous=True)
         info.get_style_context().add_class("printing-info")
+        for b in self.buttons["extruder"].values():          ## Edited by rollybot  비활성화
+            b.set_sensitive(False)
+        for b in self.buttons["heater"].values():            ## Edited by rollybot  비활성화
+            b.set_sensitive(False)
         info.attach(self.labels["temp_grid"], 0, 0, 1, 1)
         info.attach(szfe, 0, 1, 1, 2)
         info.attach(self.buttons["elapsed"], 0, 3, 1, 1)
@@ -398,7 +402,8 @@ class Panel(ScreenPanel):
     def create_buttons(self):
         self.buttons = {
             "cancel": self._gtk.Button("stop", _("Cancel"), "color2"),
-            "control": self._gtk.Button("settings", _("Settings"), "color3"),
+            "light_on": self._gtk.Button("light_on", _("Light"), "color3"),                                  ## edited by rollybot
+            "unload_filament": self._gtk.Button("retract", _("Unload Filament"), "color3"),                  ## edited by rollybot
             "fine_tune": self._gtk.Button("fine-tune", _("Fine Tuning"), "color4"),
             "menu": self._gtk.Button("complete", _("Main Menu"), "color4"),
             "pause": self._gtk.Button("pause", _("Pause"), "color1"),
@@ -410,14 +415,22 @@ class Panel(ScreenPanel):
             ),
         }
         self.buttons["cancel"].connect("clicked", self.cancel)
-        self.buttons["control"].connect("clicked", self._screen._go_to_submenu, "")
-        self.buttons["fine_tune"].connect("clicked", self.menu_item_clicked, {"panel": "fine_tune"})
+##        self.buttons["control"].connect("clicked", self._screen._go_to_submenu, "")                        ## removed by rollybot
+        self.buttons["light_on"].connect("clicked", self.toggle_light)                                       ## added by rollybot
+        self.buttons["unload_filament"].connect("clicked", self.unload_filament)                             ## edited by rollybot
+        self.buttons["fine_tune"].connect("clicked", self.menu_item_clicked, {"panel": "my_fine_tune"})      ## edited by rollybot
         self.buttons["menu"].connect("clicked", self.close_panel)
         self.buttons["pause"].connect("clicked", self.pause)
         self.buttons["restart"].connect("clicked", self.restart)
         self.buttons["resume"].connect("clicked", self.resume)
         self.buttons["save_offset_probe"].connect("clicked", self.save_offset, "probe")
         self.buttons["save_offset_endstop"].connect("clicked", self.save_offset, "endstop")
+
+    def toggle_light(self, widget):                                                                          ## def...added by rollybot
+        self._screen._ws.api.gcode_script("TOGGLE_FAN_LIGHT")
+
+    def unload_filament(self, widget):                                                                       ## def...added by rollybot
+        self._screen._ws.api.gcode_script("UNLOAD_FILAMENT")
 
     def save_offset(self, widget, device):
         sign = "+" if self.zoffset > 0 else "-"
@@ -859,15 +872,15 @@ class Panel(ScreenPanel):
             self.buttons["button_grid"].attach(self.buttons["pause"], 0, 0, 1, 1)
             self.buttons["button_grid"].attach(self.buttons["cancel"], 1, 0, 1, 1)
             self.buttons["button_grid"].attach(self.buttons["fine_tune"], 2, 0, 1, 1)
-            self.buttons["button_grid"].attach(self.buttons["control"], 3, 0, 1, 1)
+            self.buttons["button_grid"].attach(self.buttons["light_on"], 3, 0, 1, 1)            ## edited by rollybort
             self.enable_button("pause", "cancel")
             self._gtk.Button_busy(self.buttons["cancel"], False)
             self.can_close = False
         elif self.state == "paused":
             self.buttons["button_grid"].attach(self.buttons["resume"], 0, 0, 1, 1)
             self.buttons["button_grid"].attach(self.buttons["cancel"], 1, 0, 1, 1)
-            self.buttons["button_grid"].attach(self.buttons["fine_tune"], 2, 0, 1, 1)
-            self.buttons["button_grid"].attach(self.buttons["control"], 3, 0, 1, 1)
+            self.buttons["button_grid"].attach(self.buttons["unload_filament"], 2, 0, 1, 1)     ## edited by rollybort
+            self.buttons["button_grid"].attach(self.buttons["light_on"], 3, 0, 1, 1)            ## edited by rollybort
             self.enable_button("resume", "cancel")
             self._gtk.Button_busy(self.buttons["cancel"], False)
             self.can_close = False
@@ -880,8 +893,12 @@ class Panel(ScreenPanel):
             self.disable_button("resume", "restart", "menu")
             self.can_close = False
         else:
-            offset = self._printer.get_stat("gcode_move", "homing_origin")
-            self.zoffset = float(offset[2]) if offset else 0
+            offset = self._printer.get_stat("gcode_move", "homing_origin")                      ## edited by rollybort (from here)
+            self.zoffset = float(offset[2]) if offset else 0                                    ## 델타에서는 endstop값으로 offset제어
+
+            kinematics = self._printer.get_config_section("printer").get("kinematics", "")
+            is_delta = kinematics == "delta"
+
             if self.zoffset != 0:
                 if "Z_OFFSET_APPLY_ENDSTOP" in self._printer.available_commands:
                     self.buttons["button_grid"].attach(
@@ -889,7 +906,9 @@ class Panel(ScreenPanel):
                     )
                 else:
                     self.buttons["button_grid"].attach(Gtk.Label(), 0, 0, 1, 1)
-                if "Z_OFFSET_APPLY_PROBE" in self._printer.available_commands:
+
+                # 델타에서는 Probe 저장 버튼 숨김
+                if not is_delta and "Z_OFFSET_APPLY_PROBE" in self._printer.available_commands:
                     self.buttons["button_grid"].attach(
                         self.buttons["save_offset_probe"], 1, 0, 1, 1
                     )
@@ -897,7 +916,7 @@ class Panel(ScreenPanel):
                     self.buttons["button_grid"].attach(Gtk.Label(), 1, 0, 1, 1)
             else:
                 self.buttons["button_grid"].attach(Gtk.Label(), 0, 0, 1, 1)
-                self.buttons["button_grid"].attach(Gtk.Label(), 1, 0, 1, 1)
+                self.buttons["button_grid"].attach(Gtk.Label(), 1, 0, 1, 1)                     ## edited by rollybot ( to here)
 
             if self.filename:
                 self.buttons["button_grid"].attach(self.buttons["restart"], 2, 0, 1, 1)
