@@ -15,28 +15,41 @@ TEMP_ITEMS = (
 # 텔레그램 알림 카드
 TELEGRAM_TITLE = "텔레그램 알림"
 TELEGRAM_ICON = "info"
-# 알림 켜짐/꺼짐을 읽어올 Klipper 매크로 변수 (printer.cfg 의 TELEGRAM_VARS)
 TELEGRAM_STATE_OBJECT = "gcode_macro TELEGRAM_VARS"
 TELEGRAM_STATE_VAR = "user_id"
-TELEGRAM_UNSET_VALUES = ("", "0", "none")   # 이 값이면 미등록(꺼짐)
+TELEGRAM_UNSET_VALUES = ("", "0", "none")
 
-LIGHT_FAN = "fan_generic Light"   # printer.cfg 의 [fan_generic Light] 이름과 일치
-LIGHT_MACRO = "TOGGLE_FAN_LIGHT"  # 토글 매크로 이름
+# 업데이트 알림 카드
+UPDATE_TARGETS = ("mainsail", "KlipperScreen")
+UPDATE_TITLE = "새 업데이트"
+UPDATE_ICON = "complete"
+UPDATE_PANEL_NAME = "my_rollyUpdate"  # 터치 시 이동할 업데이트 패널 이름 (실제 패널 파일명에 맞게 수정)
 
-ICON_ON = "light_on"    # 켜졌을 때 아이콘
-ICON_OFF = "light"      # 꺼졌을 때 아이콘
+LIGHT_FAN = "fan_generic Light"
+LIGHT_MACRO = "TOGGLE_FAN_LIGHT"
+
+ICON_ON = "light_on"
+ICON_OFF = "light"
 
 # 모양
-RADIUS = 18                     # 모서리 둥글기(px)
-CARD_HEIGHT = 56                # 카드/버튼 최소 높이 (남는 공간은 똑같이 나눠 가짐)
-BORDER_COLOR = "#6b7280"        # 온도 카드 테두리 색
-ON_BG, ON_FG = "#f5c542", "#222222"    # 조명 켜짐
-OFF_BG, OFF_FG = "#4a4f57", "#ffffff"  # 조명 꺼짐
+RADIUS = 18
+CARD_HEIGHT = 56
+BORDER_COLOR = "#6b7280"
+ON_BG, ON_FG = "#f5c542", "#222222"
+OFF_BG, OFF_FG = "#4a4f57", "#ffffff"
 
 _CSS = f"""
 box.temp-card {{
     border: 2px solid {BORDER_COLOR};
     border-radius: {RADIUS}px;
+    padding: 8px 20px;
+}}
+button.update-alert-btn {{
+    border: 2px solid #f59e0b;
+    border-radius: {RADIUS}px;
+    background-color: rgba(245, 158, 11, 0.18);
+    background-image: none;
+    box-shadow: none;
     padding: 8px 20px;
 }}
 button.light-btn {{
@@ -72,14 +85,19 @@ class LeftPanel:
         self.panel = panel
         self.temp_labels = {}
         self.light_on = False
-        self._shown_state = None      # 마지막으로 화면에 표시한 상태
-        self._ignore_until = 0        # 버튼 누른 직후 잠깐 팬 값 무시
-        self._tg_value = None         # Moonraker 에 직접 물어본 텔레그램 ID 값
+        self._shown_state = None
+        self._ignore_until = 0
+        self._tg_value = None
         self._tg_last_query = 0
         self._tg_pending = False
+
+        # 업데이트 조회 상태 변수
+        self._has_update = False
+        self._upd_last_query = 0
+        self._upd_pending = False
+
         _load_css()
 
-        # 모든 카드/버튼이 같은 높이로 위에서 아래로 나란히 (공간이 모자라도 같이 줄어듦)
         self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.box.set_homogeneous(True)
         self.box.set_valign(Gtk.Align.FILL)
@@ -95,15 +113,16 @@ class LeftPanel:
             self.box.pack_start(self._build_temp_card(key, title, icon), True, True, 0)
 
         self._build_telegram_card()
+        self._build_update_card()
         self._build_light_button()
 
         self.box.show_all()
+        self.update_btn.hide()  # 초기에는 숨김 (업데이트 감지 시 표시)
         self._set_light_state(False)
         self.update()
 
     # ---------------- 공통 ----------------
     def _load_pixbuf(self, name):
-        """KlipperScreen 테마 아이콘을 pixbuf로 읽기 (실패하면 None)"""
         try:
             img = self.panel._gtk.Image(name)
             if img is not None:
@@ -158,10 +177,8 @@ class LeftPanel:
         card.pack_end(self.telegram_label, False, False, 0)
 
         self.box.pack_start(card, True, True, 0)
-        logging.info("Telegram card added")
 
     def _query_telegram(self):
-        """Moonraker 에 TELEGRAM_VARS 값을 직접 물어봄 (3초에 한 번까지)"""
         now = time.time()
         if now - self._tg_last_query < 3:
             return
@@ -182,17 +199,10 @@ class LeftPanel:
     def _on_telegram_query(self, result, *args):
         self._tg_pending = False
         try:
-            # 응답이 {"result": {"status": ...}} 로 한 겹 더 싸여 올 수도 있음
             data = result.get("result", result)
             val = data["status"][TELEGRAM_STATE_OBJECT][TELEGRAM_STATE_VAR]
         except Exception:
-            logging.info(f"Telegram query: unexpected result {result}")
             return
-        if val != self._tg_value:
-            logging.info(
-                "Telegram ID -> "
-                + ("unset" if str(val).strip("\"' ") in TELEGRAM_UNSET_VALUES else "registered")
-            )
         self._tg_value = val
         GLib.idle_add(self._apply_telegram)
 
@@ -201,7 +211,6 @@ class LeftPanel:
         return False
 
     def _telegram_enabled(self, printer):
-        """ID 등록됨=True(켜짐), 미등록=False(꺼짐), 읽을 수 없음=None"""
         val = self._tg_value
         if val is None and printer:
             try:
@@ -220,6 +229,83 @@ class LeftPanel:
         else:
             markup = "<span size='x-large' weight='bold' foreground='#95a5a6'>꺼짐</span>"
         self.telegram_label.set_markup(markup)
+
+    # ---------------- 업데이트 알림 카드 (터치 시 업데이트 패널 이동) ----------------
+    def _build_update_card(self):
+        inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+
+        pix = self._load_pixbuf(UPDATE_ICON)
+        if pix is not None:
+            icon = Gtk.Image()
+            icon.set_from_pixbuf(pix)
+            inner.pack_start(icon, False, False, 0)
+
+        name = Gtk.Label()
+        name.set_markup(f"<span size='large' weight='bold'>{UPDATE_TITLE}</span>")
+        name.set_halign(Gtk.Align.START)
+        inner.pack_start(name, True, True, 0)
+
+        badge = Gtk.Label()
+        badge.set_markup("<span size='large' weight='bold' foreground='#fbbf24'>설치 ▶</span>")
+        badge.set_halign(Gtk.Align.END)
+        inner.pack_end(badge, False, False, 0)
+
+        self.update_btn = Gtk.Button()
+        self.update_btn.add(inner)
+        self.update_btn.set_size_request(-1, CARD_HEIGHT)
+        self.update_btn.get_style_context().add_class("update-alert-btn")
+        self.update_btn.connect("clicked", self._open_update_panel)
+        self.box.pack_start(self.update_btn, True, True, 0)
+
+    def _open_update_panel(self, widget):
+        try:
+            self.panel._screen.show_panel(UPDATE_PANEL_NAME, "업데이트")
+        except Exception as e:
+            logging.info(f"Failed to open update panel: {e}")
+
+    def _query_update(self):
+        """Moonraker 캐시에서 업데이트 여부를 가볍게 조회 (15초에 한 번)"""
+        now = time.time()
+        if now - self._upd_last_query < 15:
+            return
+        if self._upd_pending and now - self._upd_last_query < 30:
+            return
+        self._upd_last_query = now
+        self._upd_pending = True
+        try:
+            self.panel._screen._ws.send_method(
+                "machine.update.status",
+                {"refresh": False},
+                self._on_update_query,
+            )
+        except Exception as e:
+            self._upd_pending = False
+            logging.info(f"Update query failed: {e}")
+
+    def _on_update_query(self, result, *args):
+        self._upd_pending = False
+        if not result or "result" not in result:
+            return
+        info = result["result"].get("version_info", {})
+        has_update = False
+        for name in UPDATE_TARGETS:
+            v = info.get(name)
+            if not v:
+                continue
+            behind = v.get("commits_behind") or []
+            remote = v.get("remote_version")
+            if behind or (remote and v.get("version") != remote):
+                has_update = True
+                break
+        self._has_update = has_update
+        GLib.idle_add(self._apply_update_badge)
+
+    def _apply_update_badge(self):
+        if self._has_update:
+            self.update_btn.show_all()
+        else:
+            self.update_btn.hide()
+        return False
 
     # ---------------- 조명 버튼 ----------------
     def _build_light_button(self):
@@ -276,6 +362,7 @@ class LeftPanel:
 
         self._query_telegram()
         self._set_telegram_state(self._telegram_enabled(printer))
+        self._query_update()
 
         # 실제 팬 속도를 읽을 수 있으면 그 값으로 상태 동기화
         # (버튼 누른 직후 2초는 이전 값이 남아 있을 수 있어 무시)
