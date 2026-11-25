@@ -11,6 +11,7 @@ from time import time
 
 from gi.repository import GLib, Gtk, Pango
 
+from ks_includes.functions import pad_number
 from ks_includes.KlippyGtk import find_widget
 from ks_includes.screen_panel import ScreenPanel
 
@@ -83,22 +84,22 @@ class Panel(ScreenPanel):
         for item in data:
             self.labels[item] = Gtk.Label(label="-", hexpand=True, vexpand=True)
 
-        self.labels["left"] = Gtk.Label(_("Left:"))
-        self.labels["elapsed"] = Gtk.Label(_("Elapsed:"))
-        self.labels["total"] = Gtk.Label(_("Total:"))
-        self.labels["slicer"] = Gtk.Label(_("Slicer:"))
-        self.labels["file_tlbl"] = Gtk.Label(_("File:"))
-        self.labels["fila_tlbl"] = Gtk.Label(_("Filament:"))
-        self.labels["speed_lbl"] = Gtk.Label(_("Speed:"))
-        self.labels["accel_lbl"] = Gtk.Label(_("Acceleration:"))
-        self.labels["flow"] = Gtk.Label(_("Flow:"))
-        self.labels["zoffset_lbl"] = Gtk.Label(_("Z offset:"))
-        self.labels["fila_used_lbl"] = Gtk.Label(_("Filament used:"))
-        self.labels["fila_total_lbl"] = Gtk.Label(_("Filament total:"))
-        self.labels["pa_lbl"] = Gtk.Label(_("Pressure Advance:"))
-        self.labels["flowrate_lbl"] = Gtk.Label(_("Flowrate:"))
-        self.labels["height_lbl"] = Gtk.Label(_("Height:"))
-        self.labels["layer_lbl"] = Gtk.Label(_("Layer:"))
+        self.labels["left"] = Gtk.Label(label=_("Left:"))
+        self.labels["elapsed"] = Gtk.Label(label=_("Elapsed:"))
+        self.labels["total"] = Gtk.Label(label=_("Total:"))
+        self.labels["slicer"] = Gtk.Label(label=_("Slicer:"))
+        self.labels["file_tlbl"] = Gtk.Label(label=_("File:"))
+        self.labels["fila_tlbl"] = Gtk.Label(label=_("Filament:"))
+        self.labels["speed_lbl"] = Gtk.Label(label=_("Speed:"))
+        self.labels["accel_lbl"] = Gtk.Label(label=_("Acceleration:"))
+        self.labels["flow"] = Gtk.Label(label=_("Flow:"))
+        self.labels["zoffset_lbl"] = Gtk.Label(label=_("Z offset:"))
+        self.labels["fila_used_lbl"] = Gtk.Label(label=_("Filament used:"))
+        self.labels["fila_total_lbl"] = Gtk.Label(label=_("Filament total:"))
+        self.labels["pa_lbl"] = Gtk.Label(label=_("Pressure Advance:"))
+        self.labels["flowrate_lbl"] = Gtk.Label(label=_("Flowrate:"))
+        self.labels["height_lbl"] = Gtk.Label(label=_("Height:"))
+        self.labels["layer_lbl"] = Gtk.Label(label=_("Layer:"))
 
         for fan in self._printer.get_fans():
             # fan_types = ["controller_fan", "fan_generic", "heater_fan"]
@@ -620,11 +621,11 @@ class Panel(ScreenPanel):
                 )
             if "extrude_factor" in data["gcode_move"]:
                 self.extrusion = round(float(data["gcode_move"]["extrude_factor"]) * 100)
-                self.labels["extrude_factor"].set_label(f"{self.extrusion:3}%")
+                self.labels["extrude_factor"].set_label(f"{pad_number(self.extrusion, 3)}%")
             if "speed_factor" in data["gcode_move"]:
                 self.speed = round(float(data["gcode_move"]["speed_factor"]) * 100)
                 self.speed_factor = float(data["gcode_move"]["speed_factor"])
-                self.labels["speed_factor"].set_label(f"{self.speed:3}%")
+                self.labels["speed_factor"].set_label(f"{pad_number(self.speed, 3)}%")
             if "speed" in data["gcode_move"]:
                 self.req_speed = round(float(data["gcode_move"]["speed"]) / 60 * self.speed_factor)
                 mms_unit = (
@@ -633,7 +634,8 @@ class Panel(ScreenPanel):
                     else ""
                 )
                 self.labels["req_speed"].set_label(
-                    f"{self.speed}% {self.vel:3.0f}/{self.req_speed:3.0f} {mms_unit}"
+                    f"{pad_number(self.speed, 3)}% "
+                    f"{pad_number(self.vel, 3)}/{pad_number(self.req_speed, 3)} {mms_unit}"
                 )
                 self.buttons["speed"].set_label(self.labels["req_speed"].get_label())
             if "homing_origin" in data["gcode_move"]:
@@ -666,7 +668,8 @@ class Panel(ScreenPanel):
                     else ""
                 )
                 self.labels["req_speed"].set_label(
-                    f"{self.speed}% {self.vel:3.0f}/{self.req_speed:3.0f} {mms_unit}"
+                    f"{pad_number(self.speed, 3)}% "
+                    f"{pad_number(self.vel, 3)}/{pad_number(self.req_speed, 3)} {mms_unit}"
                 )
                 self.buttons["speed"].set_label(self.labels["req_speed"].get_label())
             if "live_extruder_velocity" in data["motion_report"]:
@@ -675,7 +678,7 @@ class Panel(ScreenPanel):
                 )
         fan_label = ""
         for fan in self.fans:
-            self.fans[fan]["speed"] = f"{self._printer.get_fan_speed(fan) * 100:3.0f}%"
+            self.fans[fan]["speed"] = f"{pad_number(self._printer.get_fan_speed(fan) * 100, 3)}%"
             fan_label += f" {self.fans[fan]['name']}{self.fans[fan]['speed']}"
         if fan_label:
             self.buttons["fan"].set_label(fan_label[:12])
@@ -720,7 +723,9 @@ class Panel(ScreenPanel):
         self.flowrate = median(self.flowstore)
         self.flowstore = []
         self.labels["flowrate"].set_label(f"{self.flowrate:.1f} {self.mms3}")
-        self.buttons["extrusion"].set_label(f"{self.extrusion:3}% {self.flowrate:5.1f} {self.mms3}")
+        self.buttons["extrusion"].set_label(
+            f"{pad_number(self.extrusion, 3)}% {pad_number(self.flowrate, 5, 1)} {self.mms3}"
+        )
         return True
 
     def update_time_left(self):
@@ -746,6 +751,7 @@ class Panel(ScreenPanel):
             self.file_metadata["estimated_time"] if "estimated_time" in self.file_metadata else 0
         )
         print_duration = float(self._printer.get_stat("print_stats", "print_duration"))
+        excluded_ratio = self._excluded_object_ratio()
         if print_duration < 1:  # No-extrusion
             if last_time:
                 print_duration = last_time * progress
@@ -774,12 +780,18 @@ class Panel(ScreenPanel):
         if timeleft_type == "file":
             estimated = file_time
         elif timeleft_type == "filament":
-            estimated = filament_time
+            estimated = filament_time * (1 - excluded_ratio)
         elif timeleft_type == "slicer":
-            estimated = slicer_time
+            estimated = slicer_time * (1 - excluded_ratio)
         else:
             estimated = self.estimate_time(
-                progress, print_duration, file_time, filament_time, slicer_time, last_time
+                progress,
+                print_duration,
+                file_time,
+                filament_time,
+                slicer_time,
+                last_time,
+                excluded_ratio,
             )
         if estimated > 1:
             progress = min(max(print_duration / estimated, 0), 1)
@@ -793,21 +805,31 @@ class Panel(ScreenPanel):
         self.update_progress(progress)
 
     def estimate_time(
-        self, progress, print_duration, file_time, filament_time, slicer_time, last_time
+        self,
+        progress,
+        print_duration,
+        file_time,
+        filament_time,
+        slicer_time,
+        last_time,
+        excluded_ratio=0.0,
     ):
         estimate_above = 0.3
         slicer_time /= sqrt(self.speed_factor)
+
+        # Excluded objects reduce the actual work, but the slicer estimated time
+        # and the filament total still count every object. Scale them down by the
+        # fraction of objects excluded so the estimate, progress arc and time left
+        # stay consistent with the remaining work.
+        slicer_time *= 1 - excluded_ratio
+        filament_time *= 1 - excluded_ratio
+        last_time *= 1 - excluded_ratio
+
         if progress <= estimate_above:
             return last_time or slicer_time or filament_time or file_time
-        objects = self._printer.get_stat("exclude_object", "objects")
-        excluded_objects = self._printer.get_stat("exclude_object", "excluded_objects")
-        exclude_compensation = 3 * (len(excluded_objects) / len(objects)) if len(objects) > 0 else 0
-        weight_last = 4.0 - exclude_compensation if print_duration < last_time else 0
-        weight_slicer = (
-            1.0 + estimate_above - progress - exclude_compensation
-            if print_duration < slicer_time
-            else 0
-        )
+
+        weight_last = 4.0 if print_duration < last_time else 0
+        weight_slicer = 1.0 + estimate_above - progress if print_duration < slicer_time else 0
         weight_filament = (
             min(progress - estimate_above, 0.33) if print_duration < filament_time else 0
         )
@@ -821,6 +843,13 @@ class Panel(ScreenPanel):
             + filament_time * weight_filament
             + file_time * weight_file
         ) / total_weight
+
+    def _excluded_object_ratio(self):
+        objects = self._printer.get_stat("exclude_object", "objects")
+        if not objects:
+            return 0.0
+        excluded_objects = self._printer.get_stat("exclude_object", "excluded_objects")
+        return len(excluded_objects) / len(objects)
 
     def update_progress(self, progress: float):
         self.progress = progress

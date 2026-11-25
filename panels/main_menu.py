@@ -5,6 +5,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
+from ks_includes.functions import natural_sort_key
 from ks_includes.KlippyGtk import find_widget
 from ks_includes.widgets.heatergraph import HeaterGraph
 from ks_includes.widgets.keypad import Keypad
@@ -115,7 +116,8 @@ class Panel(MenuPanel):
             image, self.prettify(devname), None, self.bts, Gtk.PositionType.LEFT, 1
         )
         name.connect("clicked", self.toggle_visibility, device)
-        name.set_alignment(0, 0.5)
+        name.props.xalign = 0
+        name.props.yalign = 0.5
         name.get_style_context().add_class(class_name)
         visible = self._config.get_config().getboolean(
             f"graph {self._screen.state.printer_name}", device, fallback=True
@@ -137,7 +139,7 @@ class Panel(MenuPanel):
             "visible": visible,
         }
 
-        devices = sorted(self.devices)
+        devices = sorted(self.devices, key=natural_sort_key)
         pos = devices.index(device) + 1
 
         self.labels["devices"].insert_row(pos)
@@ -170,7 +172,7 @@ class Panel(MenuPanel):
 
         if self.active_heater.startswith("extruder"):
             self._screen._ws.api.set_tool_temp(
-                self._printer.get_tool_number(self.active_heater), temp
+                self._printer.get_heater_tool_number(self.active_heater), temp
             )
         elif self.active_heater == "heater_bed":
             self._screen._ws.api.set_bed_temp(temp)

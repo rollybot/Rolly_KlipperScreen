@@ -7,6 +7,7 @@ from contextlib import suppress
 
 from gi.repository import GLib, Gtk
 
+from ks_includes.functions import natural_sort_key
 from ks_includes.KlippyGtk import find_widget
 from ks_includes.screen_panel import ScreenPanel
 from ks_includes.widgets.heatergraph import HeaterGraph
@@ -154,7 +155,7 @@ class Panel(ScreenPanel):
                     target = max(target, 0)
                 if heater.startswith("extruder"):
                     self._screen._ws.api.set_tool_temp(
-                        self._printer.get_tool_number(heater), target
+                        self._printer.get_heater_tool_number(heater), target
                     )
                 elif heater.startswith("heater_bed"):
                     self._screen._ws.api.set_bed_temp(target)
@@ -274,7 +275,7 @@ class Panel(ScreenPanel):
                 if heater.startswith("extruder"):
                     if self.validate(heater, target, max_temp):
                         self._screen._ws.api.set_tool_temp(
-                            self._printer.get_tool_number(heater), target
+                            self._printer.get_heater_tool_number(heater), target
                         )
                 elif heater.startswith("heater_bed"):
                     if target is None:
@@ -363,7 +364,8 @@ class Panel(ScreenPanel):
         name = self._gtk.Button(
             image, self.prettify(devname), None, self.bts, Gtk.PositionType.LEFT, 1
         )
-        name.set_alignment(0, 0.5)
+        name.props.xalign = 0
+        name.props.yalign = 0.5
         name.get_style_context().add_class(class_name)
         visible = self._config.get_config().getboolean(
             f"graph {self._screen.state.printer_name}", device, fallback=True
@@ -397,7 +399,7 @@ class Panel(ScreenPanel):
             "visible": visible,
         }
 
-        devices = sorted(self.devices)
+        devices = sorted(self.devices, key=natural_sort_key)
         pos = devices.index(device) + 1
 
         self.labels["devices"].insert_row(pos)
@@ -450,7 +452,7 @@ class Panel(ScreenPanel):
 
         if self.active_heater.startswith("extruder"):
             self._screen._ws.api.set_tool_temp(
-                self._printer.get_tool_number(self.active_heater), temp
+                self._printer.get_heater_tool_number(self.active_heater), temp
             )
         elif self.active_heater == "heater_bed":
             self._screen._ws.api.set_bed_temp(temp)
@@ -511,7 +513,7 @@ class Panel(ScreenPanel):
         self.labels["devices"].get_style_context().add_class("heater-grid")
 
         name = Gtk.Label()
-        temp = Gtk.Label(_("Temp (°C)"))
+        temp = Gtk.Label(label=_("Temp (°C)"))
 
         self.labels["devices"].attach(name, 0, 0, 1, 1)
         self.labels["devices"].attach(temp, 1, 0, 1, 1)

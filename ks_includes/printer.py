@@ -5,6 +5,8 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib
 
+from ks_includes.functions import natural_sort_key
+
 
 class Printer:
     def __init__(self, state_cb, state_callbacks):
@@ -86,7 +88,8 @@ class Printer:
             elif section in ("led", "neopixel", "dotstar", "pca9533", "pca9632"):
                 self.ledcount += 1
 
-        self.tools = sorted(self.tools)
+        # The list index is the T/M104 T tool number, so extruderN must sit at index N
+        self.tools = sorted(self.tools, key=natural_sort_key)
         self.log_counts(printer_info)
         self.process_update(data)
 
@@ -386,6 +389,14 @@ class Printer:
 
     def get_tool_number(self, tool):
         return self.tools.index(tool)
+
+    def get_heater_tool_number(self, tool):
+        # With a single heated extruder omit T, so firmware that remaps T (e.g. AFC/INDX hotend
+        # changers) heats the tool currently mounted instead of whatever T0 maps to
+        heated = [t for t in self.tools if not t.startswith("extruder_stepper")]
+        if len(heated) == 1:
+            return None
+        return self.get_tool_number(tool)
 
     def init_temp_store(self, tempstore):
         if self.tempstore and set(self.tempstore) != set(tempstore):
