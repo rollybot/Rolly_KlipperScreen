@@ -24,7 +24,7 @@ UPDATE_TARGETS = ("mainsail", "KlipperScreen")
 UPDATE_TITLE = "업데이트"
 UPDATE_ICON = "complete"
 
-LIGHT_FAN = "fan_generic Light"
+LIGHT_FAN = "output_pin Light"
 LIGHT_MACRO = "TOGGLE_FAN_LIGHT"
 
 ICON_ON = "light_on"
@@ -321,7 +321,8 @@ class LeftPanel:
 
     def toggle_light(self, widget):
         self.light_on = not self.light_on
-        self._ignore_until = time.time() + 2   # 팬 상태가 갱신될 때까지 대기
+        self._pending_state = self.light_on      # 내가 원하는 목표 상태를 기록
+        self._ignore_until = time.time() + 10    # 최대 10초(홈 이동 시간 등) 동안 안전장치
         self.panel._screen._send_action(
             widget, "printer.gcode.script", {"script": LIGHT_MACRO}
         )
@@ -365,9 +366,20 @@ class LeftPanel:
         # 실제 팬 속도를 읽을 수 있으면 그 값으로 상태 동기화
         # (버튼 누른 직후 2초는 이전 값이 남아 있을 수 있어 무시)
         if time.time() >= self._ignore_until:
-            speed = printer.get_stat(LIGHT_FAN, "speed")
+            val = printer.get_stat(LIGHT_FAN, "value")
             try:
-                self.light_on = float(speed) > 0
-                self._set_light_state(self.light_on)
+                actual_on = float(val) > 0
+                pending = getattr(self, "_pending_state", None)
+
+                if pending is not None:
+                    # 프린터가 내가 누른 목표 상태에 도달했거나, 최대 대기 시간(15초)이 지났을 때만 동기화 재개
+                    if actual_on == pending or time.time() >= self._ignore_until:
+                        self._pending_state = None
+                        self.light_on = actual_on
+                        self._set_light_state(self.light_on)
+                else:
+                    # 평소(웹 UI 등에서 조명을 켰을 때 등)에는 즉시 동기화
+                    self.light_on = actual_on
+                    self._set_light_state(self.light_on)
             except (TypeError, ValueError):
                 pass

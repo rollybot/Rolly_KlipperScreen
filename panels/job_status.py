@@ -3,6 +3,7 @@ import logging
 import os
 
 import gi
+from panels.my_light_button import LightButton                                  ## added by rollybot
 
 gi.require_version("Gtk", "3.0")
 from math import pi, sqrt, trunc
@@ -403,7 +404,6 @@ class Panel(ScreenPanel):
     def create_buttons(self):
         self.buttons = {
             "cancel": self._gtk.Button("stop", _("Cancel"), "color2"),
-            "light_on": self._gtk.Button("light_on", _("Light"), "color3"),                                  ## edited by rollybot
             "unload_filament": self._gtk.Button("retract", _("Unload Filament"), "color3"),                  ## edited by rollybot
             "fine_tune": self._gtk.Button("fine-tune", _("Fine Tuning"), "color4"),
             "menu": self._gtk.Button("complete", _("Main Menu"), "color4"),
@@ -415,9 +415,10 @@ class Panel(ScreenPanel):
                 "home-z", _("Save Z") + "\n" + "Endstop", "color2"
             ),
         }
+        self.light_btn = LightButton(self, _("Light"))                                                       ## added by rollybot
+        self.buttons["light_on"] = self.light_btn.button                                                     ## added by rollybot
+
         self.buttons["cancel"].connect("clicked", self.cancel)
-##        self.buttons["control"].connect("clicked", self._screen._go_to_submenu, "")                        ## removed by rollybot
-        self.buttons["light_on"].connect("clicked", self.toggle_light)                                       ## added by rollybot
         self.buttons["unload_filament"].connect("clicked", self.unload_filament)                             ## edited by rollybot
         self.buttons["fine_tune"].connect("clicked", self.menu_item_clicked, {"panel": "my_fine_tune"})      ## edited by rollybot
         self.buttons["menu"].connect("clicked", self.close_panel)
@@ -426,9 +427,6 @@ class Panel(ScreenPanel):
         self.buttons["resume"].connect("clicked", self.resume)
         self.buttons["save_offset_probe"].connect("clicked", self.save_offset, "probe")
         self.buttons["save_offset_endstop"].connect("clicked", self.save_offset, "endstop")
-
-    def toggle_light(self, widget):                                                                          ## def...added by rollybot
-        self._screen._ws.api.gcode_script("TOGGLE_FAN_LIGHT")
 
     def unload_filament(self, widget):                                                                       ## def...added by rollybot
         self._screen._ws.api.gcode_script("UNLOAD_FILAMENT")
@@ -570,7 +568,9 @@ class Panel(ScreenPanel):
             self.get_file_metadata(response=True)
         elif action != "notify_status_update":
             return
-
+  
+        self.light_btn.sync()                                                   ## added by rollybot
+  
         for x in self._printer.get_temp_devices():
             if x in data:
                 self.update_temp(
