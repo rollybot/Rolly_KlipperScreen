@@ -253,12 +253,12 @@ class LeftPanel:
         if has_update:
             ctx.add_class("update-on")
             self.update_label.set_markup(
-                "<span size='large' weight='bold' foreground='#2ecc71'>새 버전</span>"
+                "<span size='large' weight='bold' foreground='#2ecc71'>[ New버전 ]</span>"
             )
         else:
             ctx.remove_class("update-on")
             self.update_label.set_markup(
-                "<span size='large' foreground='#95a5a6'> </span>"
+                "<span size='large' weight='bold' foreground='#95a5a6'>[ 최신상태 ] </span>"
             )
 
     def _query_update(self):
