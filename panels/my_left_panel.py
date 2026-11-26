@@ -13,17 +13,16 @@ TEMP_ITEMS = (
 )
 
 # 텔레그램 알림 카드
-TELEGRAM_TITLE = "텔레그램 알림"
+TELEGRAM_TITLE = "텔레그램"
 TELEGRAM_ICON = "info"
 TELEGRAM_STATE_OBJECT = "gcode_macro TELEGRAM_VARS"
 TELEGRAM_STATE_VAR = "user_id"
 TELEGRAM_UNSET_VALUES = ("", "0", "none")
 
-# 업데이트 알림 카드
+# 업데이트 알림 카드 (표시 전용)
 UPDATE_TARGETS = ("mainsail", "KlipperScreen")
-UPDATE_TITLE = "새 업데이트"
+UPDATE_TITLE = "업데이트"
 UPDATE_ICON = "complete"
-UPDATE_PANEL_NAME = "my_rollyUpdate"  # 터치 시 이동할 업데이트 패널 이름 (실제 패널 파일명에 맞게 수정)
 
 LIGHT_FAN = "fan_generic Light"
 LIGHT_MACRO = "TOGGLE_FAN_LIGHT"
@@ -42,15 +41,15 @@ _CSS = f"""
 box.temp-card {{
     border: 2px solid {BORDER_COLOR};
     border-radius: {RADIUS}px;
-    padding: 8px 20px;
+    padding: 8px 14px;
 }}
-button.update-alert-btn {{
-    border: 2px solid #f59e0b;
+box.notice-card {{
+    border: 2px solid {BORDER_COLOR};
     border-radius: {RADIUS}px;
-    background-color: rgba(245, 158, 11, 0.18);
-    background-image: none;
-    box-shadow: none;
-    padding: 8px 20px;
+    padding: 4px 8px;
+}}
+box.notice-card.update-on {{
+    border: 2px solid {BORDER_COLOR};
 }}
 button.light-btn {{
     border-radius: {RADIUS}px;
@@ -112,12 +111,10 @@ class LeftPanel:
         for key, title, icon in TEMP_ITEMS:
             self.box.pack_start(self._build_temp_card(key, title, icon), True, True, 0)
 
-        self._build_telegram_card()
-        self._build_update_card()
+        self._build_notice_row()
         self._build_light_button()
 
         self.box.show_all()
-        self.update_btn.hide()  # 초기에는 숨김 (업데이트 감지 시 표시)
         self._set_light_state(False)
         self.update()
 
@@ -155,29 +152,49 @@ class LeftPanel:
         self.temp_labels[key] = temp
         return card
 
-    # ---------------- 텔레그램 알림 카드 ----------------
-    def _build_telegram_card(self):
-        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
-        card.get_style_context().add_class("temp-card")
-        card.set_size_request(-1, CARD_HEIGHT)
+    # ---------------- 알림 줄: 텔레그램(좌) | 업데이트(우) ----------------
+    def _make_notice_half(self, title, icon_name):
+        # 세로 2줄: (아이콘 + 제목) / 상태
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        card.get_style_context().add_class("notice-card")
+        card.set_size_request(1, CARD_HEIGHT)  # 최소 폭을 1로 해서 줄 폭을 키우지 않음
 
-        pix = self._load_pixbuf(TELEGRAM_ICON)
+        top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        top.set_halign(Gtk.Align.CENTER)
+
+        pix = self._load_pixbuf(icon_name)
         if pix is not None:
             icon = Gtk.Image()
+            if pix.get_width() > 30:
+                pix = pix.scale_simple(30, 30, 2)
             icon.set_from_pixbuf(pix)
-            card.pack_start(icon, False, False, 0)
+            top.pack_start(icon, False, False, 0)
 
         name = Gtk.Label()
-        name.set_markup(f"<span size='large' weight='bold'>{TELEGRAM_TITLE}</span>")
-        name.set_halign(Gtk.Align.START)
-        card.pack_start(name, True, True, 0)
+        name.set_markup(f"<span size='large' weight='bold' foreground='#95a5a6'>{title}</span>")
+        top.pack_start(name, False, False, 0)
 
-        self.telegram_label = Gtk.Label()
-        self.telegram_label.set_halign(Gtk.Align.END)
-        card.pack_end(self.telegram_label, False, False, 0)
+        state = Gtk.Label()
+        state.set_halign(Gtk.Align.CENTER)
 
-        self.box.pack_start(card, True, True, 0)
+        card.pack_start(top, True, True, 0)
+        card.pack_start(state, True, True, 0)
+        return card, state
 
+    def _build_notice_row(self):
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        row.set_homogeneous(True)
+        row.set_size_request(1, -1)
+
+        tg_card, self.telegram_label = self._make_notice_half(TELEGRAM_TITLE, TELEGRAM_ICON)
+        self.update_card, self.update_label = self._make_notice_half(UPDATE_TITLE, UPDATE_ICON)
+
+        row.pack_start(tg_card, True, True, 0)
+        row.pack_start(self.update_card, True, True, 0)
+        self.box.pack_start(row, True, True, 0)
+        self._set_update_state(False)
+
+    # ---------------- 텔레그램 ----------------
     def _query_telegram(self):
         now = time.time()
         if now - self._tg_last_query < 3:
@@ -223,45 +240,26 @@ class LeftPanel:
 
     def _set_telegram_state(self, enabled):
         if enabled is None:
-            markup = "<span size='x-large' foreground='#95a5a6'>--</span>"
+            markup = "<span foreground='#95a5a6'>--</span>"
         elif enabled:
-            markup = "<span size='x-large' weight='bold' foreground='#2ecc71'>켜짐</span>"
+            markup = "<span size='large' weight='bold' foreground='#2ecc71'>[ 알림 O ]</span>"
         else:
-            markup = "<span size='x-large' weight='bold' foreground='#95a5a6'>꺼짐</span>"
+            markup = "<span size='large' weight='bold' foreground='#95a5a6'>[ 알림 X ]</span>"
         self.telegram_label.set_markup(markup)
 
-    # ---------------- 업데이트 알림 카드 (터치 시 업데이트 패널 이동) ----------------
-    def _build_update_card(self):
-        inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
-
-        pix = self._load_pixbuf(UPDATE_ICON)
-        if pix is not None:
-            icon = Gtk.Image()
-            icon.set_from_pixbuf(pix)
-            inner.pack_start(icon, False, False, 0)
-
-        name = Gtk.Label()
-        name.set_markup(f"<span size='large' weight='bold'>{UPDATE_TITLE}</span>")
-        name.set_halign(Gtk.Align.START)
-        inner.pack_start(name, True, True, 0)
-
-        badge = Gtk.Label()
-        badge.set_markup("<span size='large' weight='bold' foreground='#fbbf24'>설치 ▶</span>")
-        badge.set_halign(Gtk.Align.END)
-        inner.pack_end(badge, False, False, 0)
-
-        self.update_btn = Gtk.Button()
-        self.update_btn.add(inner)
-        self.update_btn.set_size_request(-1, CARD_HEIGHT)
-        self.update_btn.get_style_context().add_class("update-alert-btn")
-        self.update_btn.connect("clicked", self._open_update_panel)
-        self.box.pack_start(self.update_btn, True, True, 0)
-
-    def _open_update_panel(self, widget):
-        try:
-            self.panel._screen.show_panel(UPDATE_PANEL_NAME, "업데이트")
-        except Exception as e:
-            logging.info(f"Failed to open update panel: {e}")
+    # ---------------- 업데이트 알림 (표시 전용) ----------------
+    def _set_update_state(self, has_update):
+        ctx = self.update_card.get_style_context()
+        if has_update:
+            ctx.add_class("update-on")
+            self.update_label.set_markup(
+                "<span size='large' weight='bold' foreground='#2ecc71'>새 버전</span>"
+            )
+        else:
+            ctx.remove_class("update-on")
+            self.update_label.set_markup(
+                "<span size='large' foreground='#95a5a6'> </span>"
+            )
 
     def _query_update(self):
         """Moonraker 캐시에서 업데이트 여부를 가볍게 조회 (15초에 한 번)"""
@@ -298,13 +296,10 @@ class LeftPanel:
                 has_update = True
                 break
         self._has_update = has_update
-        GLib.idle_add(self._apply_update_badge)
+        GLib.idle_add(self._apply_update_state)
 
-    def _apply_update_badge(self):
-        if self._has_update:
-            self.update_btn.show_all()
-        else:
-            self.update_btn.hide()
+    def _apply_update_state(self):
+        self._set_update_state(self._has_update)
         return False
 
     # ---------------- 조명 버튼 ----------------
@@ -358,7 +353,10 @@ class LeftPanel:
             if temp is None:
                 lbl.set_markup("<span size='x-large'>--</span>")
                 continue
-            lbl.set_markup(f"<span size='x-large' weight='bold'>{temp:.0f}°C</span>")
+            try:
+                lbl.set_markup(f"<span size='x-large' weight='bold'>{float(temp):.0f}°C</span>")
+            except (TypeError, ValueError):
+                lbl.set_markup("<span size='x-large'>--</span>")
 
         self._query_telegram()
         self._set_telegram_state(self._telegram_enabled(printer))
@@ -368,6 +366,8 @@ class LeftPanel:
         # (버튼 누른 직후 2초는 이전 값이 남아 있을 수 있어 무시)
         if time.time() >= self._ignore_until:
             speed = printer.get_stat(LIGHT_FAN, "speed")
-            if speed is not None:
-                self.light_on = speed > 0
+            try:
+                self.light_on = float(speed) > 0
                 self._set_light_state(self.light_on)
+            except (TypeError, ValueError):
+                pass
